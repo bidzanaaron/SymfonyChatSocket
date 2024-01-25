@@ -1,4 +1,5 @@
 import { Server } from "socket.io";
+import { sanitize } from "./service/sanitize.js";
 
 const io = new Server(3000, {
     cors: {
@@ -43,6 +44,9 @@ io.on("connection", (socket) => {
 
     socket.on("sendMessage", (data) => {
         let chatParticipants = connectedClients.filter((element) => isParticipantInChat(data.chatId, element.availableChats))
+
+        const sanitizedMessage = sanitize(data.message);
+        data.message = sanitizedMessage;
 
         for (let i = 0; i < chatParticipants.length; i++) {
             if (chatParticipants[i].socket === socket) { continue; }
