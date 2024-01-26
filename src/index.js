@@ -22,6 +22,13 @@ function isParticipantInChat(chatId, availableChats) {
     return false;
 }
 
+function getUsernameBySocket(socket) {
+    const socketEntry = connectedClients.filter((element) => element.socket === socket);
+    if (socketEntry.length == 0) { return; }
+
+    return socketEntry.username;
+}
+
 io.on("connection", (socket) => {
     socket.on("userInformation", (data) => {
         const username = data.username;
@@ -40,10 +47,17 @@ io.on("connection", (socket) => {
             console.log(availableChats[i]);
         }
         console.log("");
+
+        socket.emit("userInformation", {
+            'authorized': true
+        });
     })
 
     socket.on("sendMessage", (data) => {
         let chatParticipants = connectedClients.filter((element) => isParticipantInChat(data.chatId, element.availableChats))
+
+        const socketUsername = getUsernameBySocket(socket);
+        data.username = socketUsername;
 
         const sanitizedMessage = sanitize(data.message);
         data.message = sanitizedMessage;
