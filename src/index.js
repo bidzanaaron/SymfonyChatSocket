@@ -14,11 +14,9 @@ function isParticipantInChat(chatId, availableChats) {
     for (let i = 0; i < availableChats.length; i++) {
         if (availableChats[i] !== chatId) { continue; }
 
-        console.log(`${chatId} was found in the list.`);
         return true;
     }
 
-    console.log(`${chatId} was not found in the list.`);
     return false;
 }
 
@@ -29,27 +27,50 @@ function getUsernameBySocket(socket) {
     return socketEntry.username;
 }
 
+function findChatPartner(executingSocket, chatId) {
+    const socketEntry = connectedClients.filter((element) => element.chatId === chatId && element.socket !== executingSocket);
+    if (socketEntry.length == 0) { return; }
+
+    return socketEntry[0];
+}
+
+function getSocketEntryBySocket(socket) {
+    const socketEntry = connectedClients.filter((element) => element.socket === socket);
+    if (socketEntry.length == 0) { return; }
+
+    return socketEntry[0];
+}
+
 io.on("connection", (socket) => {
     socket.on("userInformation", (data) => {
         const username = data.username;
         const availableChats = data.availableChats;
+        const chatId = data.chatId;
 
         connectedClients.push({
             socket: socket,
             username: username,
             availableChats: availableChats,
+            chatId: chatId,
         });
-
-        console.log("");
-        console.log(`User identified as ${username} has connected.`);
-        console.log(`Their available chats are:`);
-        for (let i = 0; i < availableChats.length; i++) {
-            console.log(availableChats[i]);
-        }
-        console.log("");
 
         socket.emit("userInformation", {
             'authorized': true
+        });
+
+        if (chatId === null || chatId === undefined) { return; }
+        const potentialChatPartner = findChatPartner(socket, chatId);
+
+        if (potentialChatPartner === null || potentialChatPartner === undefined) { return; }
+
+        socket.emit("userOnline", {
+            chatId: chatId,
+            username: potentialChatPartner.username,
+        });
+
+        potentialChatPartner.socket.emit("userOnline", {
+            chatId: chatId,
+            username: potentialChatPartner.username,
         });
     })
 
@@ -70,7 +91,32 @@ io.on("connection", (socket) => {
         }
     });
 
+    socket.on("typing", (isTyping) => {
+        let socketEntry = getSocketEntryBySocket(socket);
+        if (socketEntry === null || socketEntry === undefined) { return; }
+
+        let chatPartner = findChatPartner(socket, socketEntry.chatId);
+        if (chatPartner === null || chatPartner === undefined) { return; }
+
+        let chatPartnerSocket = chatPartner.socket;
+        if (chatPartnerSocket === null || chatPartnerSocket === undefined) { return; }
+
+        chatPartnerSocket.emit("typing", isTyping);
+    });
+
     socket.on("disconnect", () => {
+        const socketEntry = getSocketEntryBySocket(socket);
+        if (socketEntry.chatId !== null && socketEntry.chatId !== undefined) {
+            const potentialChatPartner = findChatPartner(socket, socketEntry.chatId);
+
+            if (potentialChatPartner !== null && potentialChatPartner !== undefined) {
+                potentialChatPartner.socket.emit("userOffline", {
+                    chatId: socketEntry.chatId,
+                    username: socketEntry.username,
+                });
+            }
+        }
+
         let newConnectedClients = connectedClients.filter((element) => element.socket !== socket);
         connectedClients = newConnectedClients;
     });
